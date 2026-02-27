@@ -128,8 +128,10 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "success with default time range and no results",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
@@ -208,9 +210,11 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "success with page size set",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
-				PageSize:      10,
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
+				PageSize:       10,
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
@@ -231,10 +235,12 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "success with pagination token",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
-				PageSize:      10,
-				NextPageToken: []byte("prev-page-token"),
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
+				PageSize:       10,
+				NextPageToken:  []byte("prev-page-token"),
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
@@ -256,9 +262,11 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "success with page size limiting - breaks after PageSize rows",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
-				PageSize:      2,
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
+				PageSize:       2,
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
@@ -312,8 +320,10 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "success with multiple results",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
@@ -371,8 +381,10 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "error when iterator is nil",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
@@ -386,8 +398,10 @@ func TestSelectDomainAuditLogs(t *testing.T) {
 		{
 			name: "error when iterator close fails",
 			filter: &nosqlplugin.DomainAuditLogFilter{
-				DomainID:      domainID,
-				OperationType: operationType,
+				DomainID:       domainID,
+				OperationType:  operationType,
+				MinCreatedTime: &minTime,
+				MaxCreatedTime: &maxTime,
 			},
 			queryMockFn: func(query *gocql.MockQuery) {
 				query.EXPECT().WithContext(gomock.Any()).Return(query).Times(1)
