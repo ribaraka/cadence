@@ -36,6 +36,25 @@ import (
 	"github.com/uber/cadence/common/types"
 )
 
+type retryCountKeyType string
+
+const retryCountKey = retryCountKeyType("retryCount")
+
+// domainTagKey is the metric-tag key produced by metrics.DomainTag.
+// It is captured once at init so call() can decide between the overall
+// (persistence_requests) and per-domain (persistence_requests_per_domain)
+// metrics by inspecting tag content rather than tag count.
+var domainTagKey = metrics.DomainTag("").Key()
+
+func hasDomainTag(tags []metrics.Tag) bool {
+	for _, t := range tags {
+		if t.Key() == domainTagKey {
+			return true
+		}
+	}
+	return false
+}
+
 type base struct {
 	metricClient                  metrics.Client
 	logger                        log.Logger
@@ -134,7 +153,8 @@ func (p *base) recordLatencyHistogram(scope metrics.ScopeIdx, duration time.Dura
 
 func (p *base) call(scope metrics.ScopeIdx, op func() error, tags ...metrics.Tag) error {
 	metricsScope := p.metricClient.Scope(scope, tags...)
-	if len(tags) > 0 {
+	perDomain := hasDomainTag(tags)
+	if perDomain {
 		metricsScope.IncCounter(metrics.PersistenceRequestsPerDomain)
 	} else {
 		metricsScope.IncCounter(metrics.PersistenceRequests)
@@ -142,7 +162,7 @@ func (p *base) call(scope metrics.ScopeIdx, op func() error, tags ...metrics.Tag
 	before := time.Now()
 	err := op()
 	duration := time.Since(before)
-	if len(tags) > 0 {
+	if perDomain {
 		metricsScope.RecordTimer(metrics.PersistenceLatencyPerDomain, duration)
 		metricsScope.RecordHistogramDuration(metrics.PersistenceLatencyPerDomainHistogram, duration)
 	} else {
@@ -153,7 +173,7 @@ func (p *base) call(scope metrics.ScopeIdx, op func() error, tags ...metrics.Tag
 
 	logger := p.logger.Helper()
 	if err != nil {
-		if len(tags) > 0 {
+		if perDomain {
 			p.updateErrorMetricPerDomain(scope, err, metricsScope, logger)
 		} else {
 			p.updateErrorMetric(scope, err, metricsScope, logger)
@@ -182,7 +202,7 @@ func (p *base) callWithDomainAndShardScope(scope metrics.ScopeIdx, op func() err
 	overallScope := p.metricClient.Scope(scope)
 	domainMetricsScope := p.metricClient.Scope(scope, append([]metrics.Tag{domainTag}, additionalTags...)...)
 	shardOperationsMetricsScope := p.metricClient.Scope(scope, append([]metrics.Tag{shardIDTag}, additionalTags...)...)
-	shardOverallMetricsScope := p.metricClient.Scope(metrics.PersistenceShardRequestCountScope, shardIDTag)
+	shardOverallMetricsScope := p.metricClient.Scope(metrics.PersistenceShardRequestCountScope, append([]metrics.Tag{shardIDTag}, additionalTags...)...)
 
 	domainMetricsScope.IncCounter(metrics.PersistenceRequestsPerDomain)
 	shardOperationsMetricsScope.IncCounter(metrics.PersistenceRequestsPerShard)
