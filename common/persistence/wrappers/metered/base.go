@@ -36,15 +36,16 @@ import (
 	"github.com/uber/cadence/common/types"
 )
 
-type retryCountKeyType string
-
-const retryCountKey = retryCountKeyType("retryCount")
-
 // domainTagKey is the metric-tag key produced by metrics.DomainTag.
 // It is captured once at init so call() can decide between the overall
 // (persistence_requests) and per-domain (persistence_requests_per_domain)
 // metrics by inspecting tag content rather than tag count.
 var domainTagKey = metrics.DomainTag("").Key()
+
+// taskCategoryTagKey is the metric-tag key produced by metrics.TaskCategoryTag.
+// Base persistence metrics use task_category="none" for operations where the
+// concept does not apply, keeping label keys consistent with history-task calls.
+var taskCategoryTagKey = metrics.TaskCategoryTag("").Key()
 
 func hasDomainTag(tags []metrics.Tag) bool {
 	for _, t := range tags {
@@ -53,6 +54,15 @@ func hasDomainTag(tags []metrics.Tag) bool {
 		}
 	}
 	return false
+}
+
+func ensureTaskCategoryTag(tags []metrics.Tag) []metrics.Tag {
+	for _, t := range tags {
+		if t.Key() == taskCategoryTagKey {
+			return tags
+		}
+	}
+	return append(tags, metrics.TaskCategoryTag("none"))
 }
 
 type base struct {
@@ -152,8 +162,11 @@ func (p *base) recordLatencyHistogram(scope metrics.ScopeIdx, duration time.Dura
 }
 
 func (p *base) call(scope metrics.ScopeIdx, op func() error, tags ...metrics.Tag) error {
-	metricsScope := p.metricClient.Scope(scope, tags...)
 	perDomain := hasDomainTag(tags)
+	if !perDomain {
+		tags = ensureTaskCategoryTag(tags)
+	}
+	metricsScope := p.metricClient.Scope(scope, tags...)
 	if perDomain {
 		metricsScope.IncCounter(metrics.PersistenceRequestsPerDomain)
 	} else {
@@ -183,6 +196,7 @@ func (p *base) call(scope metrics.ScopeIdx, op func() error, tags ...metrics.Tag
 }
 
 func (p *base) callWithoutDomainTag(scope metrics.ScopeIdx, op func() error, tags ...metrics.Tag) error {
+	tags = ensureTaskCategoryTag(tags)
 	metricsScope := p.metricClient.Scope(scope, tags...)
 	metricsScope.IncCounter(metrics.PersistenceRequests)
 	before := time.Now()
@@ -199,7 +213,7 @@ func (p *base) callWithoutDomainTag(scope metrics.ScopeIdx, op func() error, tag
 }
 
 func (p *base) callWithDomainAndShardScope(scope metrics.ScopeIdx, op func() error, domainTag metrics.Tag, shardIDTag metrics.Tag, additionalTags ...metrics.Tag) error {
-	overallScope := p.metricClient.Scope(scope)
+	overallScope := p.metricClient.Scope(scope, ensureTaskCategoryTag(additionalTags)...)
 	domainMetricsScope := p.metricClient.Scope(scope, append([]metrics.Tag{domainTag}, additionalTags...)...)
 	shardOperationsMetricsScope := p.metricClient.Scope(scope, append([]metrics.Tag{shardIDTag}, additionalTags...)...)
 	shardOverallMetricsScope := p.metricClient.Scope(metrics.PersistenceShardRequestCountScope, append([]metrics.Tag{shardIDTag}, additionalTags...)...)
