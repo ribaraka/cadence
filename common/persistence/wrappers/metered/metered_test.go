@@ -62,6 +62,19 @@ func TestPersistenceMetricsLabelConsistency(t *testing.T) {
 	wrapped.EXPECT().GetReplicationDLQSize(gomock.Any(), gomock.Any()).Return(&persistence.GetReplicationDLQSizeResponse{}, nil).Times(1)
 	historyStore := persistence.NewMockHistoryManager(ctrl)
 	historyStore.EXPECT().AppendHistoryNodes(gomock.Any(), gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{}, nil).Times(1)
+	// GetTasks and ListDomains additionally exercise the response metrics
+	// (persistence_response_payload_size / _row_size). GetTasks tags with domain,
+	// ListDomains carries no custom tag, and GetHistoryTasks tags with task_category,
+	// so the same metric name would register with three different label-key sets
+	// without normalization.
+	taskStore := persistence.NewMockTaskManager(ctrl)
+	taskStore.EXPECT().GetTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetTasksResponse{
+		Tasks: []*persistence.TaskInfo{{DomainID: "test-domain"}},
+	}, nil).Times(1)
+	domainStore := persistence.NewMockDomainManager(ctrl)
+	domainStore.EXPECT().ListDomains(gomock.Any(), gomock.Any()).Return(&persistence.ListDomainsResponse{
+		Domains: []*persistence.GetDomainResponse{{}},
+	}, nil).Times(1)
 
 	var registrationErrors []error
 	promCfg := &tallyp8s.Configuration{
@@ -106,6 +119,18 @@ func TestPersistenceMetricsLabelConsistency(t *testing.T) {
 		log.NewNoop(),
 		&config.Persistence{EnablePersistenceLatencyHistogramMetrics: true},
 	)
+	taskManager := NewTaskManager(
+		taskStore,
+		metricsClient,
+		log.NewNoop(),
+		&config.Persistence{EnablePersistenceLatencyHistogramMetrics: true},
+	)
+	domainManager := NewDomainManager(
+		domainStore,
+		metricsClient,
+		log.NewNoop(),
+		&config.Persistence{EnablePersistenceLatencyHistogramMetrics: true},
+	)
 
 	ctx := context.Background()
 	_, err = shardMetricsManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{})
@@ -119,6 +144,10 @@ func TestPersistenceMetricsLabelConsistency(t *testing.T) {
 	_, err = noShardMetricsManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{})
 	assert.NoError(t, err)
 	_, err = historyManager.AppendHistoryNodes(ctx, &persistence.AppendHistoryNodesRequest{})
+	assert.NoError(t, err)
+	_, err = taskManager.GetTasks(ctx, &persistence.GetTasksRequest{DomainName: "test-domain"})
+	assert.NoError(t, err)
+	_, err = domainManager.ListDomains(ctx, &persistence.ListDomainsRequest{})
 	assert.NoError(t, err)
 
 	assert.Empty(t, registrationErrors, "Prometheus registration errors must not be emitted")

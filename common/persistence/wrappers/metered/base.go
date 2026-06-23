@@ -65,6 +65,17 @@ func ensureTaskCategoryTag(tags []metrics.Tag) []metrics.Tag {
 	return append(tags, metrics.TaskCategoryTag("none"))
 }
 
+// ensureResponseMetricTags guarantees a uniform key set so
+// the persistence response metrics (persistence_response_payload_size,
+// persistence_response_row_size, persistence_empty_response) register with a
+// stable label set regardless of which request type emitted them.
+func ensureResponseMetricTags(tags []metrics.Tag) []metrics.Tag {
+	if !hasDomainTag(tags) {
+		tags = append(tags, metrics.NonDomainTag())
+	}
+	return ensureTaskCategoryTag(tags)
+}
+
 type base struct {
 	metricClient                  metrics.Client
 	logger                        log.Logger
@@ -270,7 +281,7 @@ func (p *base) emitRowCountMetrics(methodName string, req any, res any) {
 		return
 	}
 
-	metricScope := p.metricClient.Scope(scope.scope, getCustomMetricTags(req)...)
+	metricScope := p.metricClient.Scope(scope.scope, ensureResponseMetricTags(getCustomMetricTags(req))...)
 
 	if resLen.Len() == 0 {
 		metricScope.IncCounter(metrics.PersistenceEmptyResponseCounter)
@@ -290,7 +301,7 @@ func (p *base) emitPayloadSizeMetrics(methodName string, req any, res any) {
 		return
 	}
 
-	metricScope := p.metricClient.Scope(scope.scope, getCustomMetricTags(req)...)
+	metricScope := p.metricClient.Scope(scope.scope, ensureResponseMetricTags(getCustomMetricTags(req))...)
 	metricScope.RecordHistogramValue(metrics.PersistenceResponsePayloadSize, float64(resSize.ByteSize()))
 }
 
